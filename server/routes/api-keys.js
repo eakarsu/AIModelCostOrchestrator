@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/api-keys
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/api-keys/ai/audit
-router.post('/ai/audit', auth, async (req, res) => {
+router.post('/ai/audit', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM api_keys ORDER BY current_usage DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI API key security and usage auditor. Analyze API key usage patterns, identify security risks, expired or unused keys, and recommend best practices for key management. Flag keys approaching usage limits or with unusual activity patterns.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Audit these API keys for security risks, usage patterns, and management recommendations.') + '\n\nAPI key data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are an API security expert. Audit API key usage and identify security concerns. Return JSON: { risk_score: 0-100, issues: [{key_name, issue, severity}], recommendations: [] }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'api-keys', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI audit error:', error);
     res.status(500).json({ success: false, error: error.message });

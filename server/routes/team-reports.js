@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/team-reports
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/team-reports/ai/analyze
-router.post('/ai/analyze', auth, async (req, res) => {
+router.post('/ai/analyze', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM team_reports ORDER BY total_cost DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI team usage analyst. Analyze team usage reports to identify spending patterns, efficiency differences between teams, and opportunities for cross-team optimization. Provide actionable recommendations for each team.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Analyze team usage reports and identify optimization opportunities across teams.') + '\n\nTeam report data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are a team efficiency expert. Analyze team AI usage and efficiency. Return JSON: { most_efficient_team, least_efficient_team, efficiency_insights: [], cost_sharing_recommendations: [] }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'team-reports', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI analyze error:', error);
     res.status(500).json({ success: false, error: error.message });

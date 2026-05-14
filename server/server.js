@@ -1,16 +1,31 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+const pool = require('./db');
 const app = express();
 const PORT = process.env.SERVER_PORT || 3001;
 
-// Middleware
+// Security middleware
+app.use(helmet());
 app.use(cors({
-  origin: `http://localhost:${process.env.CLIENT_PORT || 3000}`,
-  credentials: true
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// Ensure ai_results table exists at startup
+pool.query(`
+  CREATE TABLE IF NOT EXISTS ai_results (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER,
+    feature VARCHAR(50),
+    input_data JSONB,
+    result TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`).catch(err => console.error('ai_results table creation error:', err));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -30,6 +45,9 @@ app.use('/api/prompt-optimization', require('./routes/prompt-optimization'));
 app.use('/api/cache-management', require('./routes/cache-management'));
 app.use('/api/rate-limiting', require('./routes/rate-limiting'));
 app.use('/api/cost-allocation', require('./routes/cost-allocation'));
+app.use('/api/proxy', require('./routes/proxy'));
+app.use('/api/ai-results', require('./routes/ai-results'));
+app.use('/api/ai', require('./routes/ai'));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -55,3 +73,22 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
+// === BATCH 05 AUTO-MOUNT (custom feature suggestions) ===
+app.use('/api/agentic-model-router', require('./routes/agentic-model-router'));
+app.use('/api/realtime-cost-optimizer', require('./routes/realtime-cost-optimizer'));
+app.use('/api/budget-governor', require('./routes/budget-governor'));
+app.use('/api/multi-provider-arbitrage', require('./routes/multi-provider-arbitrage'));
+app.use('/api/vertical-cost-benchmark', require('./routes/vertical-cost-benchmark'));
+
+// === Batch 05 Gaps & Frontend Mounts ===
+try { const _gap_ai_fine_tune_roi_analyzer = require('./routes/gap-ai-fine-tune-roi-analyzer'); app.use('/api/gap-ai-fine-tune-roi-analyzer', _gap_ai_fine_tune_roi_analyzer); } catch(e) { console.error('gap mount fail ai-fine-tune-roi-analyzer:', e.message); }
+try { const _gap_ai_quality_vs_cost_pareto = require('./routes/gap-ai-quality-vs-cost-pareto'); app.use('/api/gap-ai-quality-vs-cost-pareto', _gap_ai_quality_vs_cost_pareto); } catch(e) { console.error('gap mount fail ai-quality-vs-cost-pareto:', e.message); }
+try { const _gap_ai_agentic_cost_governor = require('./routes/gap-ai-agentic-cost-governor'); app.use('/api/gap-ai-agentic-cost-governor', _gap_ai_agentic_cost_governor); } catch(e) { console.error('gap mount fail ai-agentic-cost-governor:', e.message); }
+try { const _gap_ai_dataset_leakage_detector = require('./routes/gap-ai-dataset-leakage-detector'); app.use('/api/gap-ai-dataset-leakage-detector', _gap_ai_dataset_leakage_detector); } catch(e) { console.error('gap mount fail ai-dataset-leakage-detector:', e.message); }
+try { const _gap_native = require('./routes/gap-native'); app.use('/api/gap-native', _gap_native); } catch(e) { console.error('gap mount fail native:', e.message); }
+try { const _gap_saml_sso = require('./routes/gap-saml-sso'); app.use('/api/gap-saml-sso', _gap_saml_sso); } catch(e) { console.error('gap mount fail saml-sso:', e.message); }
+try { const _gap_compliance = require('./routes/gap-compliance'); app.use('/api/gap-compliance', _gap_compliance); } catch(e) { console.error('gap mount fail compliance:', e.message); }
+try { const _gap_mobile = require('./routes/gap-mobile'); app.use('/api/gap-mobile', _gap_mobile); } catch(e) { console.error('gap mount fail mobile:', e.message); }
+try { const _gap_anomaly = require('./routes/gap-anomaly'); app.use('/api/gap-anomaly', _gap_anomaly); } catch(e) { console.error('gap mount fail anomaly:', e.message); }
+// === End Batch 05 Mounts ===

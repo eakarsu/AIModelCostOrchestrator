@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/cost-allocation
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/cost-allocation/ai/optimize
-router.post('/ai/optimize', auth, async (req, res) => {
+router.post('/ai/optimize', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM cost_allocation ORDER BY actual_spend DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI cost allocation expert. Analyze cost allocation tags and spending patterns across projects, departments, and environments. Identify budget variances, recommend reallocation strategies, and suggest ways to improve cost visibility and accountability.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Optimize cost allocation across projects and departments based on current spending data.') + '\n\nCost allocation data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are a cost allocation expert. Optimize AI cost allocation across projects and teams. Return JSON: { reallocation_suggestions: [{from, to, amount, reason}], budget_variances: [{project, variance_pct}] }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'cost-allocation', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI optimize error:', error);
     res.status(500).json({ success: false, error: error.message });

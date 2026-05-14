@@ -2,14 +2,47 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/cost-analytics
 router.get('/', auth, async (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+      const result = await pool.query(
+        'SELECT * FROM cost_analytics ORDER BY date DESC, created_at DESC LIMIT $1 OFFSET $2',
+        [parseInt(limit), offset]
+      );
+      const count = await pool.query('SELECT COUNT(*) FROM cost_analytics');
+      return res.json({ success: true, data: result.rows, total: parseInt(count.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+    }
     const result = await pool.query('SELECT * FROM cost_analytics ORDER BY date DESC, created_at DESC');
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error('Get cost analytics error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/cost-analytics/summary - spend by model and daily trend
+router.get('/summary', auth, async (req, res) => {
+  try {
+    const byModel = await pool.query(
+      `SELECT model_name, SUM(total_cost) as total_cost, SUM(tokens_used) as total_tokens, SUM(request_count) as total_requests
+       FROM cost_analytics GROUP BY model_name ORDER BY total_cost DESC`
+    );
+    const byDept = await pool.query(
+      `SELECT department, SUM(total_cost) as total_cost FROM cost_analytics GROUP BY department ORDER BY total_cost DESC`
+    );
+    const daily = await pool.query(
+      `SELECT date, SUM(total_cost) as total_cost FROM cost_analytics
+       WHERE date >= NOW() - INTERVAL '30 days' GROUP BY date ORDER BY date ASC`
+    );
+    res.json({ success: true, data: { byModel: byModel.rows, byDepartment: byDept.rows, daily: daily.rows } });
+  } catch (error) {
+    console.error('Cost analytics summary error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -32,6 +65,9 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { model_name, department, date, tokens_used, input_tokens, output_tokens, total_cost, request_count, avg_latency } = req.body;
+    if (!model_name || !department || !date || !tokens_used || total_cost === undefined) {
+      return res.status(400).json({ success: false, error: 'model_name, department, date, tokens_used, and total_cost are required' });
+    }
     const result = await pool.query(
       `INSERT INTO cost_analytics (model_name, department, date, tokens_used, input_tokens, output_tokens, total_cost, request_count, avg_latency)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
@@ -79,38 +115,19 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/cost-analytics/ai/insights
-router.post('/ai/insights', auth, async (req, res) => {
+router.post('/ai/insights', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM cost_analytics ORDER BY date DESC LIMIT 10');
 
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI cost analytics expert. Analyze cost data and provide actionable insights on spending patterns, cost anomalies, and optimization opportunities. Focus on identifying trends, outliers, and potential savings.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Analyze these cost analytics and provide insights on spending patterns and optimization opportunities.') + '\n\nContext data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
+    const systemPrompt = `You are an AI cost analytics expert. Analyze cost data and provide actionable insights. Return JSON only: { total_spend, top_cost_driver, optimization_opportunities: [{action, estimated_savings_pct}], budget_status: "on_track|over|under" }`;
+    const userContent = (prompt || 'Analyze these cost analytics and provide insights on spending patterns and optimization opportunities.') + '\n\nContext data: ' + JSON.stringify(data.rows);
 
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'cost-analytics', { prompt, data: data.rows }, text);
+
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI insights error:', error);
     res.status(500).json({ success: false, error: error.message });

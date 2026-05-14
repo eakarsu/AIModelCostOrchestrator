@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/benchmarks
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/benchmarks/ai/compare
-router.post('/ai/compare', auth, async (req, res) => {
+router.post('/ai/compare', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM benchmarks ORDER BY test_date DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI model benchmarking expert. Compare model performance benchmarks across accuracy, speed, cost, and throughput dimensions. Identify the best models for different use cases and provide cost-performance trade-off analysis.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Compare these benchmark results and identify the best models for different use cases.') + '\n\nBenchmark data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are an AI benchmark expert. Compare model performance and cost. Return JSON: { winner: { model_name, reason }, cost_quality_rankings: [{model_name, score}], recommendations: [] }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'benchmarks', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI compare error:', error);
     res.status(500).json({ success: false, error: error.message });

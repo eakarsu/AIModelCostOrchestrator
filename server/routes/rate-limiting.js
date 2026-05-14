@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/rate-limiting
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/rate-limiting/ai/recommend
-router.post('/ai/recommend', auth, async (req, res) => {
+router.post('/ai/recommend', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM rate_limiting ORDER BY current_usage_pct DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI rate limiting expert. Analyze current rate limiting policies and usage patterns to recommend optimal rate limits. Balance cost control with service availability. Consider burst handling, tier-based limits, and graceful degradation strategies.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Recommend optimal rate limiting policies based on current usage patterns.') + '\n\nRate limiting data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are a rate limiting expert. Recommend optimal rate limits based on usage patterns. Return JSON: { recommendations: [{service, tier, suggested_rpm, rationale}], overall_strategy }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'rate-limiting', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI recommend error:', error);
     res.status(500).json({ success: false, error: error.message });

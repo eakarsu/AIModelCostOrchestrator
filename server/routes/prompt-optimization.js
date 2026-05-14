@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/prompt-optimization
 router.get('/', auth, async (req, res) => {
@@ -79,38 +81,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/prompt-optimization/ai/optimize
-router.post('/ai/optimize', auth, async (req, res) => {
+router.post('/ai/optimize', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM prompt_optimization ORDER BY token_reduction_pct DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI prompt optimization expert. Analyze prompts and suggest optimized versions that use fewer tokens while maintaining output quality. Apply techniques like concise instructions, structured formatting, and removal of redundant context.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Optimize the given prompt to reduce token usage while maintaining quality.') + '\n\nPrevious optimizations for reference: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are a prompt engineering expert. Optimize prompts to reduce tokens while maintaining quality. Return JSON: { optimized_prompt, original_tokens, estimated_optimized_tokens, reduction_pct, quality_impact }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'prompt-optimization', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI optimize error:', error);
     res.status(500).json({ success: false, error: error.message });

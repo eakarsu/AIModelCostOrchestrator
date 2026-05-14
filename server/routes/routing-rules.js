@@ -2,10 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/routing-rules
 router.get('/', auth, async (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+      const result = await pool.query(
+        'SELECT * FROM routing_rules ORDER BY priority ASC, created_at DESC LIMIT $1 OFFSET $2',
+        [parseInt(limit), offset]
+      );
+      const count = await pool.query('SELECT COUNT(*) FROM routing_rules');
+      return res.json({ success: true, data: result.rows, total: parseInt(count.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+    }
     const result = await pool.query('SELECT * FROM routing_rules ORDER BY priority ASC, created_at DESC');
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -32,6 +44,9 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { name, description, condition_type, condition_value, target_model, fallback_model, priority, is_active, requests_routed, cost_saved } = req.body;
+    if (!name || !condition_type || !condition_value || !target_model) {
+      return res.status(400).json({ success: false, error: 'name, condition_type, condition_value, and target_model are required' });
+    }
     const result = await pool.query(
       `INSERT INTO routing_rules (name, description, condition_type, condition_value, target_model, fallback_model, priority, is_active, requests_routed, cost_saved)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
@@ -79,38 +94,19 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/routing-rules/ai/suggest
-router.post('/ai/suggest', auth, async (req, res) => {
+router.post('/ai/suggest', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM routing_rules ORDER BY cost_saved DESC LIMIT 10');
 
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI model routing expert. Suggest intelligent routing rules that direct requests to the most cost-effective model based on task complexity, latency requirements, and quality needs. Consider fallback strategies and load balancing.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Suggest new routing rules to optimize model selection and reduce costs.') + '\n\nCurrent routing rules: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
+    const systemPrompt = `You are an AI model routing expert. Suggest intelligent routing rules that direct requests to the most cost-effective model based on task complexity, latency requirements, and quality needs. Return JSON only: { recommended_model, alternative_model, cost_savings_estimate, routing_criteria, confidence }`;
+    const userContent = (prompt || 'Suggest new routing rules to optimize model selection and reduce costs.') + '\n\nCurrent routing rules: ' + JSON.stringify(data.rows);
 
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'routing-rules', { prompt, rules: data.rows }, text);
+
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI suggest error:', error);
     res.status(500).json({ success: false, error: error.message });

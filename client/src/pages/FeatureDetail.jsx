@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import AppLayout from '../components/AppLayout';
 import {
   Brain,
   BarChart3,
@@ -587,6 +588,7 @@ export default function FeatureDetail() {
   // ─── Main Render ───────────────────────────────────────────────────────────
 
   return (
+    <AppLayout>
     <div className="feature-detail-page">
       {/* ── Top Bar ──────────────────────────────────────────────────────────── */}
       <div className="navbar" style={{ borderBottom: `3px solid ${feature.color}` }}>
@@ -1137,5 +1139,6 @@ export default function FeatureDetail() {
         }
       `}</style>
     </div>
+    </AppLayout>
   );
 }

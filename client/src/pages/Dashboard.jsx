@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import AppLayout from '../components/AppLayout';
 import {
   Brain,
   BarChart3,
@@ -92,29 +93,8 @@ export default function Dashboard() {
   const { user, logout } = useAuth();
 
   return (
-    <div className="dashboard-layout">
-      {/* ── Navbar ──────────────────────────────────────────────────────────── */}
-      <nav className="navbar">
-        <div className="navbar-brand" onClick={() => navigate('/dashboard')}>
-          <div className="navbar-brand-icon">
-            <Brain />
-          </div>
-          <span>AI Cost Orchestrator</span>
-        </div>
-
-        <div className="navbar-actions">
-          <span className="navbar-user">
-            {user?.name || user?.email || 'User'}
-          </span>
-          <button className="btn btn-ghost" onClick={logout}>
-            <LogOut size={16} />
-            Logout
-          </button>
-        </div>
-      </nav>
-
-      {/* ── Main Content ───────────────────────────────────────────────────── */}
-      <div className="page-container">
+    <AppLayout>
+    <div className="page-container">
         {/* Header */}
         <div className="page-header">
           <h1
@@ -225,6 +205,6 @@ export default function Dashboard() {
           </p>
         </footer>
       </div>
-    </div>
+    </AppLayout>
   );
 }

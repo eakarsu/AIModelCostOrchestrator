@@ -2,10 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/ab-testing
 router.get('/', auth, async (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+      const result = await pool.query(
+        'SELECT * FROM ab_testing ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+        [parseInt(limit), offset]
+      );
+      const count = await pool.query('SELECT COUNT(*) FROM ab_testing');
+      return res.json({ success: true, data: result.rows, total: parseInt(count.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+    }
     const result = await pool.query('SELECT * FROM ab_testing ORDER BY created_at DESC');
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -79,38 +91,16 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/ab-testing/ai/recommend
-router.post('/ai/recommend', auth, async (req, res) => {
+router.post('/ai/recommend', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM ab_testing ORDER BY created_at DESC LIMIT 10');
-
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI A/B testing expert. Analyze model comparison test results and recommend winners based on cost-effectiveness, quality scores, and statistical significance. Consider sample sizes and confidence intervals in your recommendations.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Analyze these A/B test results and recommend winners for each test.') + '\n\nA/B test data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
-
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const systemPrompt = `You are an A/B testing expert for AI models. Analyze test results and recommend winners. Return JSON: { recommended_model, confidence_pct, key_findings: [], next_steps: [] }`;
+    const userContent = (prompt || 'Provide analysis based on the data.') + '\n\nData: ' + JSON.stringify(data.rows);
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'ab-testing', { prompt, data: data.rows }, text);
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI recommend error:', error);
     res.status(500).json({ success: false, error: error.message });

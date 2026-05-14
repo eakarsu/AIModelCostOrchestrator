@@ -2,10 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { aiRateLimiter } = require('../middleware/rateLimiter');
+const { callOpenRouter, parseAIJson, saveAIResult } = require('../lib/aiHelper');
 
 // GET /api/usage-monitoring
 router.get('/', auth, async (req, res) => {
   try {
+    const { page, limit } = req.query;
+    if (page && limit) {
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+      const result = await pool.query(
+        'SELECT * FROM usage_monitoring ORDER BY last_active DESC, created_at DESC LIMIT $1 OFFSET $2',
+        [parseInt(limit), offset]
+      );
+      const count = await pool.query('SELECT COUNT(*) FROM usage_monitoring');
+      return res.json({ success: true, data: result.rows, total: parseInt(count.rows[0].count), page: parseInt(page), limit: parseInt(limit) });
+    }
     const result = await pool.query('SELECT * FROM usage_monitoring ORDER BY last_active DESC, created_at DESC');
     res.json({ success: true, data: result.rows });
   } catch (error) {
@@ -32,6 +44,9 @@ router.get('/:id', auth, async (req, res) => {
 router.post('/', auth, async (req, res) => {
   try {
     const { service_name, model_name, endpoint, requests_today, tokens_today, cost_today, error_rate, avg_response_time, status, last_active } = req.body;
+    if (!service_name || !model_name || !endpoint) {
+      return res.status(400).json({ success: false, error: 'service_name, model_name, and endpoint are required' });
+    }
     const result = await pool.query(
       `INSERT INTO usage_monitoring (service_name, model_name, endpoint, requests_today, tokens_today, cost_today, error_rate, avg_response_time, status, last_active)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
@@ -79,38 +94,19 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/usage-monitoring/ai/anomalies
-router.post('/ai/anomalies', auth, async (req, res) => {
+router.post('/ai/anomalies', auth, aiRateLimiter, async (req, res) => {
   try {
     const { prompt } = req.body;
     const data = await pool.query('SELECT * FROM usage_monitoring ORDER BY cost_today DESC LIMIT 10');
 
-    const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'AI Cost Orchestrator'
-      },
-      body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI usage monitoring expert. Detect anomalies in API usage patterns including unusual spikes in requests, tokens, costs, or error rates. Flag potential issues and provide recommendations for investigation and remediation.'
-          },
-          {
-            role: 'user',
-            content: (prompt || 'Detect any anomalies in the current usage monitoring data and flag potential issues.') + '\n\nUsage data: ' + JSON.stringify(data.rows)
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      })
-    });
+    const systemPrompt = `You are an AI usage monitoring expert. Detect anomalies in API usage patterns. Return JSON only: { anomalies: [{ service, issue, severity }], overall_health: "healthy|degraded|critical", recommendations: [] }`;
+    const userContent = (prompt || 'Detect any anomalies in the current usage monitoring data and flag potential issues.') + '\n\nUsage data: ' + JSON.stringify(data.rows);
 
-    const result = await response.json();
-    res.json({ success: true, data: result });
+    const text = await callOpenRouter(systemPrompt, userContent, 1000);
+    const parsed = parseAIJson(text);
+    await saveAIResult(req.user?.id, 'usage-monitoring', { prompt, data: data.rows }, text);
+
+    res.json({ success: true, data: parsed });
   } catch (error) {
     console.error('AI anomalies error:', error);
     res.status(500).json({ success: false, error: error.message });
