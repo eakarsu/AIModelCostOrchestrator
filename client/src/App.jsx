@@ -2,6 +2,9 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 
+import CodexCustomVizFeature from './pages/CodexCustomVizFeature';
+import CodexOperationsFeature from './pages/CodexOperationsFeature';
+
 // Lazy load pages
 const Login = React.lazy(() => import('./pages/Login'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -14,6 +17,7 @@ const UsageMonitoringPage = React.lazy(() => import('./pages/UsageMonitoringPage
 const ProxyTesterPage = React.lazy(() => import('./pages/ProxyTesterPage'));
 const AIResultsPage = React.lazy(() => import('./pages/AIResultsPage'));
 const AIToolsPage = React.lazy(() => import('./pages/AIToolsPage'));
+const SLACostGuardrailPage = React.lazy(() => import('./pages/SLACostGuardrailPage'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -36,6 +40,9 @@ export default function App() {
   return (
     <React.Suspense fallback={<LoadingFallback />}>
       <Routes>
+        <Route path="/codex/custom-viz" element={<ProtectedRoute><CodexCustomVizFeature /></ProtectedRoute>} />
+        <Route path="/codex/operations" element={<ProtectedRoute><CodexOperationsFeature /></ProtectedRoute>} />
+
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/dashboard/cost-analytics" element={<ProtectedRoute><CostAnalyticsPage /></ProtectedRoute>} />
@@ -46,6 +53,7 @@ export default function App() {
         <Route path="/dashboard/proxy-tester" element={<ProtectedRoute><ProxyTesterPage /></ProtectedRoute>} />
         <Route path="/dashboard/ai-results" element={<ProtectedRoute><AIResultsPage /></ProtectedRoute>} />
         <Route path="/dashboard/ai-tools" element={<ProtectedRoute><AIToolsPage /></ProtectedRoute>} />
+        <Route path="/dashboard/sla-cost-guardrail" element={<ProtectedRoute><SLACostGuardrailPage /></ProtectedRoute>} />
         <Route path="/dashboard/:feature" element={<ProtectedRoute><FeatureDetail /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

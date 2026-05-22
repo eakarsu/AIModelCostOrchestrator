@@ -1,6 +1,6 @@
 const pool = require('../db');
 
-const MODEL = 'anthropic/claude-3-5-sonnet-20241022';
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-3-5-sonnet-20241022';
 
 async function callOpenRouter(systemPrompt, userContent, maxTokens = 1000) {
   const response = await fetch(process.env.OPENROUTER_BASE_URL + '/chat/completions', {

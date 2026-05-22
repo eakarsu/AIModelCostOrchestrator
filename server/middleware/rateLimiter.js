@@ -7,7 +7,7 @@ const aiRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, error: 'Too many AI requests. Please wait before trying again.' },
   // Use user id when available, otherwise fall back to default IP key generator
-  skip: false,
+  skip: () => false,
 });
 
 module.exports = { aiRateLimiter };

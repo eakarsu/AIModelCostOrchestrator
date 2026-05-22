@@ -48,6 +48,7 @@ app.use('/api/cost-allocation', require('./routes/cost-allocation'));
 app.use('/api/proxy', require('./routes/proxy'));
 app.use('/api/ai-results', require('./routes/ai-results'));
 app.use('/api/ai', require('./routes/ai'));
+app.use('/api/sla-cost-guardrail', require('./routes/sla-cost-guardrail'));
 
 // Health check
 app.get('/api/health', (req, res) => {
