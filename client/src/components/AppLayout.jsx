@@ -51,6 +51,7 @@ const navSections = [
       { path: '/dashboard/cache-management', label: 'Cache Management', icon: Database },
       { path: '/dashboard/rate-limiting', label: 'Rate Limiting', icon: Gauge },
       { path: '/dashboard/cost-allocation', label: 'Cost Allocation', icon: PieChart },
+      { path: '/dashboard/production-controls', label: 'Production Controls', icon: Shield },
     ],
   },
 ];

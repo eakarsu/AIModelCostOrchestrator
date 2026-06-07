@@ -18,6 +18,7 @@ const ProxyTesterPage = React.lazy(() => import('./pages/ProxyTesterPage'));
 const AIResultsPage = React.lazy(() => import('./pages/AIResultsPage'));
 const AIToolsPage = React.lazy(() => import('./pages/AIToolsPage'));
 const SLACostGuardrailPage = React.lazy(() => import('./pages/SLACostGuardrailPage'));
+const ProductionControlsPage = React.lazy(() => import('./pages/ProductionControlsPage'));
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/dashboard/ai-results" element={<ProtectedRoute><AIResultsPage /></ProtectedRoute>} />
         <Route path="/dashboard/ai-tools" element={<ProtectedRoute><AIToolsPage /></ProtectedRoute>} />
         <Route path="/dashboard/sla-cost-guardrail" element={<ProtectedRoute><SLACostGuardrailPage /></ProtectedRoute>} />
+        <Route path="/dashboard/production-controls" element={<ProtectedRoute><ProductionControlsPage /></ProtectedRoute>} />
         <Route path="/dashboard/:feature" element={<ProtectedRoute><FeatureDetail /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
