@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 require('dotenv').config({ path: require('path').join(__dirname, '..', '..', '.env') });
+const { jwtSecret } = require('../config/security');
 
 const auth = (req, res, next) => {
   try {
@@ -10,7 +11,7 @@ const auth = (req, res, next) => {
 
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, jwtSecret());
     req.user = decoded;
     next();
   } catch (error) {

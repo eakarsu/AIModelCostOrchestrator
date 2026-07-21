@@ -15,18 +15,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 
-// Ensure ai_results table exists at startup
-pool.query(`
-  CREATE TABLE IF NOT EXISTS ai_results (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER,
-    feature VARCHAR(50),
-    input_data JSONB,
-    result TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-  )
-`).catch(err => console.error('ai_results table creation error:', err));
-
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/models', require('./routes/models'));
@@ -49,6 +37,12 @@ app.use('/api/proxy', require('./routes/proxy'));
 app.use('/api/ai-results', require('./routes/ai-results'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/sla-cost-guardrail', require('./routes/sla-cost-guardrail'));
+app.use('/api/cost-workflow', require('./routes/costWorkflow'));
+
+app.use(/^\/api\/(?:gap-|agentic-model-router|realtime-cost-optimizer|budget-governor|multi-provider-arbitrage|vertical-cost-benchmark)/, (req,res,next) => {
+  if (process.env.ENABLE_EXPERIMENTAL_ROUTES === 'true') return next();
+  return res.status(501).json({success:false,error:'Generated/provider-backed surface is quarantined',required:'ENABLE_EXPERIMENTAL_ROUTES=true plus documented provider configuration'});
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
