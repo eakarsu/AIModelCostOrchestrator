@@ -33,8 +33,8 @@ export default function Login() {
   };
 
   const handleQuickLogin = async () => {
-    const demoEmail = 'admin@aiorchestrator.com';
-    const demoPassword = 'admin123';
+    const demoEmail = import.meta.env.VITE_DEMO_EMAIL || '';
+    const demoPassword = import.meta.env.VITE_DEMO_PASSWORD || '';
 
     setEmail(demoEmail);
     setPassword(demoPassword);
