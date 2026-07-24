@@ -109,7 +109,7 @@ router.get('/me', auth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    res.json({ success: true, data: result.rows[0] });
+    res.json({ success: true, user: result.rows[0], data: result.rows[0] });
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({ success: false, error: error.message });
