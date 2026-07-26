@@ -4,34 +4,76 @@ import toast from 'react-hot-toast';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [user, setUser] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('auth_user') || 'null');
+    } catch {
+      localStorage.removeItem('auth_user');
+      return null;
+    }
+  });
+  const [token, setToken] = useState(() => {
+    const storedToken = localStorage.getItem('token');
+    if (!storedToken || storedToken === 'undefined' || storedToken === 'null') {
+      localStorage.removeItem('token');
+      return null;
+    }
+    return storedToken;
+  });
   const [loading, setLoading] = useState(true);
 
   const isAuthenticated = !!token && !!user;
 
   // On mount, verify token if it exists
   useEffect(() => {
-    if (token) {
-      fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` },
+    if (!token) {
+      setLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const controller = new AbortController();
+    setLoading(true);
+
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+      .then((res) => {
+        if (res.status === 401 || res.status === 403) {
+          const error = new Error('Invalid token');
+          error.isAuthenticationFailure = true;
+          throw error;
+        }
+        if (!res.ok) throw new Error(`Session verification failed (${res.status})`);
+        return res.json();
       })
-        .then((res) => {
-          if (!res.ok) throw new Error('Invalid token');
-          return res.json();
-        })
-        .then((data) => {
-          setUser(data.user || data);
-        })
-        .catch(() => {
+      .then((data) => {
+        if (!active) return;
+        const payload = data.data || data;
+        const verifiedUser = data.user || payload.user || payload;
+        localStorage.setItem('auth_user', JSON.stringify(verifiedUser));
+        setUser(verifiedUser);
+      })
+      .catch((error) => {
+        if (!active || error.name === 'AbortError') return;
+        if (error.isAuthenticationFailure) {
           localStorage.removeItem('token');
+          localStorage.removeItem('auth_user');
           setToken(null);
           setUser(null);
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+        } else {
+          toast.error('Unable to verify the session. Retrying on the next request.');
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [token]);
 
   const login = useCallback(async (email, password) => {
@@ -47,10 +89,16 @@ export function AuthProvider({ children }) {
       throw new Error(data.error || data.message || 'Login failed');
     }
 
-    const newToken = data.token;
-    const userData = data.user || { email };
+    const payload = data.data || data;
+    const newToken = payload.token;
+    const userData = payload.user || data.user || { email };
+
+    if (!newToken || typeof newToken !== 'string') {
+      throw new Error('Login response did not include an access token');
+    }
 
     localStorage.setItem('token', newToken);
+    localStorage.setItem('auth_user', JSON.stringify(userData));
     setToken(newToken);
     setUser(userData);
     toast.success(`Welcome back, ${userData.name || userData.email}!`);
@@ -59,6 +107,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
+    localStorage.removeItem('auth_user');
     setToken(null);
     setUser(null);
     toast.success('Logged out successfully');
