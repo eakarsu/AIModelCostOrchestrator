@@ -1,3 +1,4 @@
+import GeneratedAiResponse from './GeneratedAiResponse';
 import React, { useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -23,7 +24,7 @@ export default function SLACostGuardrailPage() {
         <div className="card" style={{ marginTop: 20 }}>
           <h2>{result.band}</h2>
           <p>Projected monthly cost: ${result.projectedMonthlyCost}</p>
-          <pre>{JSON.stringify(result.actions, null, 2)}</pre>
+          <GeneratedAiResponse response={result} />
         </div>
       )}
     </div>

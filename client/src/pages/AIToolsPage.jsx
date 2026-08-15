@@ -1,3 +1,4 @@
+import GeneratedAiResponse from './GeneratedAiResponse';
 import React, { useState } from 'react';
 import AppLayout from '../components/AppLayout';
 import {
@@ -292,9 +293,7 @@ export default function AIToolsPage() {
           {result && (
             <div style={{ marginTop: 20, padding: 16, background: '#0f172a', border: '1px solid #334155', borderRadius: 8 }}>
               <h3 style={{ marginBottom: 8 }}>Result</h3>
-              <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, color: '#e2e8f0' }}>
-                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-              </pre>
+              <GeneratedAiResponse response={result} />
             </div>
           )}
         </div>

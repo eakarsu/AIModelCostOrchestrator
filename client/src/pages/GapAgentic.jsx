@@ -1,3 +1,4 @@
+import GeneratedAiResponse from './GeneratedAiResponse';
 import React, { useState } from 'react';
 
 // === Batch 05 Gaps & Frontend Mounts ===
@@ -116,9 +117,7 @@ export default function GapAgentic() {
       {result && (
         <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 20, marginBottom: 20 }}>
           <h3 style={{ marginTop: 0 }}>Result</h3>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0, fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>
-            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-          </pre>
+          <GeneratedAiResponse response={result} />
         </div>
       )}
 
