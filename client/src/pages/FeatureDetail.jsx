@@ -902,6 +902,18 @@ export default function FeatureDetail() {
                 );
               })}
             </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={handleCloseModal}>Cancel</button>
+              <button className="btn btn-secondary" onClick={handleOpenEdit}>
+                <Edit3 size={16} /> Edit
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => setDeleteConfirmId(selectedItem.id || selectedItem._id)}
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
