@@ -32,22 +32,13 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = async () => {
+  const handleQuickLogin = () => {
     const demoEmail = import.meta.env.VITE_DEMO_EMAIL || '';
     const demoPassword = import.meta.env.VITE_DEMO_PASSWORD || '';
 
     setEmail(demoEmail);
     setPassword(demoPassword);
 
-    setIsLoading(true);
-    try {
-      await login(demoEmail, demoPassword);
-      navigate('/dashboard');
-    } catch (err) {
-      toast.error(err.message || 'Demo login failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -288,7 +279,7 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Login Button */}
+            {/* Sign-in Button */}
             <button
               type="submit"
               className="btn btn-primary"
@@ -308,7 +299,7 @@ export default function Login() {
               ) : (
                 <>
                   <LogIn style={{ width: '18px', height: '18px' }} />
-                  Login
+                  Sign In
                 </>
               )}
             </button>
@@ -327,7 +318,7 @@ export default function Login() {
             disabled={isLoading}
           >
             <Sparkles />
-            Quick Login &mdash; Demo Access
+            Auto Fill Demo Credentials
             <ArrowRight style={{ width: '14px', height: '14px', opacity: 0.6 }} />
           </button>
         </div>
