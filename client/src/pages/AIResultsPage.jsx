@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { History, Brain } from 'lucide-react';
 import AppLayout from '../components/AppLayout';
+import GeneratedAiResponse from './GeneratedAiResponse';
 
 function authFetch(url, opts = {}) {
   return fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}`, ...(opts.headers || {}) } }).then(r => r.json());
@@ -23,7 +24,8 @@ export default function AIResultsPage() {
     setLoading(true);
     const featureParam = feature !== 'all' ? `&feature=${feature}` : '';
     const res = await authFetch(`/api/ai-results?page=${page}&limit=${LIMIT}${featureParam}`);
-    if (res.success) { setResults(res.data); setTotal(res.total || 0); }
+    if (res.success && Array.isArray(res.data)) { setResults(res.data); setTotal(res.total || 0); }
+    else { setResults([]); setTotal(0); }
     setLoading(false);
   }
 
@@ -81,15 +83,7 @@ export default function AIResultsPage() {
                   {isExpanded && (
                     <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border-secondary)' }}>
                       <div style={{ marginTop: 12 }}>
-                        {typeof parsed === 'object' ? (
-                          <pre style={{ background: 'var(--bg-input)', borderRadius: 8, padding: 16, fontSize: 12, color: 'var(--text-secondary)', overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                            {JSON.stringify(parsed, null, 2)}
-                          </pre>
-                        ) : (
-                          <div style={{ background: 'var(--bg-input)', borderRadius: 8, padding: 16, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                            {parsed}
-                          </div>
-                        )}
+                        <GeneratedAiResponse response={parsed} />
                       </div>
                     </div>
                   )}

@@ -207,7 +207,8 @@ function Confidence({ value }) {
 }
 
 function Primitive({ value }) {
-  if (value == null || value === '') return <span style={{ color: '#64748b' }}>Not provided</span>;
+  if (value == null) return <span style={{ color: '#64748b' }}>Not provided</span>;
+  if (value === '') return <span style={{ color: '#64748b' }}>(empty string)</span>;
   if (typeof value === 'boolean') return <span style={{ color: value ? '#047857' : '#b45309', fontWeight: 700 }}>{value ? 'Yes' : 'No'}</span>;
   return <Narrative text={String(value)} />;
 }
@@ -246,6 +247,11 @@ function StructuredValue({ value, depth = 0, fieldKey = '' }) {
   if (parsed == null || ['string', 'number', 'boolean'].includes(typeof parsed)) return <Primitive value={parsed} />;
   if (Array.isArray(parsed)) {
     if (!parsed.length) return <span style={{ color: '#64748b' }}>No items reported</span>;
+    const columns = parsed.length > 1 && parsed.every(item => item && typeof item === 'object' && !Array.isArray(item))
+      ? [...new Set(parsed.flatMap(item => Object.keys(item)))] : [];
+    if (columns.length && columns.length <= 5 && parsed.every(item => columns.every(key => item[key] == null || typeof item[key] !== 'object'))) {
+      return <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}><thead><tr>{columns.map(key => <th key={key} scope="col" style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #cbd5e1' }}>{displayLabel(key)}</th>)}</tr></thead><tbody>{parsed.map((item, index) => <tr key={index}>{columns.map(key => <td key={key} style={{ padding: 10, borderBottom: '1px solid #e2e8f0', verticalAlign: 'top' }}><Primitive value={item[key]} /></td>)}</tr>)}</tbody></table></div>;
+    }
     return <div style={{ display: 'grid', gap: 10 }}>{parsed.map((item, index) => <ItemCard key={index} item={item} index={index} depth={depth} />)}</div>;
   }
 
@@ -287,7 +293,7 @@ function toPlainText(value, depth = 0) {
 export default function GeneratedAiResponse({ response }) {
   const [copied, setCopied] = useState(false);
   const parsed = useMemo(() => parseAiValue(response), [response]);
-  if (!parsed) return null;
+  if (parsed === null || parsed === undefined) return null;
 
   const payload = typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : { result: parsed };
   const content = unwrapContent(payload);

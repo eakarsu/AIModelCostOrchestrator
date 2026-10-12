@@ -8,6 +8,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [demoMessage, setDemoMessage] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
   const emailRef = useRef(null);
@@ -32,13 +33,21 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = () => {
-    const demoEmail = import.meta.env.VITE_DEMO_EMAIL || '';
-    const demoPassword = import.meta.env.VITE_DEMO_PASSWORD || '';
-
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-
+  const handleQuickLogin = async () => {
+    setDemoMessage('');
+    try {
+      const response = await fetch('/api/auth/demo-credentials');
+      const data = await response.json();
+      if (!response.ok || !data.email || !data.password) {
+        setDemoMessage(data.error || 'Demo credentials are not configured for this local app.');
+        return;
+      }
+      setEmail(data.email);
+      setPassword(data.password);
+      setDemoMessage('Demo credentials filled. Select Sign In to continue.');
+    } catch {
+      setDemoMessage('Demo credentials are unavailable. Enter your account credentials manually.');
+    }
   };
 
   return (
@@ -318,9 +327,10 @@ export default function Login() {
             disabled={isLoading}
           >
             <Sparkles />
-            Auto Fill Demo Credentials
+            Fill Demo Credentials
             <ArrowRight style={{ width: '14px', height: '14px', opacity: 0.6 }} />
           </button>
+          {demoMessage && <p role="status">{demoMessage}</p>}
         </div>
 
         {/* Footer */}

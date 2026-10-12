@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import AppLayout from '../components/AppLayout';
+import GeneratedAiResponse from './GeneratedAiResponse';
 import {
   Brain,
   BarChart3,
@@ -80,58 +81,6 @@ const iconMap = {
   MessageSquare,
 };
 
-// ─── Markdown / AI Content Renderer ──────────────────────────────────────────
-
-function processBold(text) {
-  if (!text) return text;
-  const parts = text.split(/\*\*(.*?)\*\*/g);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-  );
-}
-
-function renderAIContent(content) {
-  if (!content) return null;
-  const lines = content.split('\n');
-  return lines.map((line, i) => {
-    if (line.startsWith('### '))
-      return (
-        <h4 key={i} className="ai-heading-4">
-          {processBold(line.slice(4))}
-        </h4>
-      );
-    if (line.startsWith('## '))
-      return (
-        <h3 key={i} className="ai-heading-3">
-          {processBold(line.slice(3))}
-        </h3>
-      );
-    if (line.startsWith('# '))
-      return (
-        <h2 key={i} className="ai-heading-2">
-          {processBold(line.slice(2))}
-        </h2>
-      );
-    if (line.startsWith('- ') || line.startsWith('* '))
-      return (
-        <div key={i} className="ai-bullet">
-          <span className="ai-bullet-dot">&#8226;</span>
-          <span>{processBold(line.slice(2))}</span>
-        </div>
-      );
-    if (/^\d+\.\s/.test(line))
-      return (
-        <div key={i} className="ai-numbered">
-          {processBold(line)}
-        </div>
-      );
-    if (line.startsWith('---') || line.startsWith('___'))
-      return <hr key={i} className="ai-divider" />;
-    if (line.trim() === '') return <div key={i} className="ai-spacer" />;
-    return <p key={i}>{processBold(line)}</p>;
-  });
-}
-
 // ─── Value Formatters ────────────────────────────────────────────────────────
 
 function formatValue(value, fieldType) {
@@ -181,7 +130,7 @@ export default function FeatureDetail() {
   const [formData, setFormData] = useState({});
   const [formErrors, setFormErrors] = useState({});
   const [aiPrompt, setAiPrompt] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
+  const [aiResponse, setAiResponse] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -197,7 +146,9 @@ export default function FeatureDetail() {
     setLoading(true);
     try {
       const data = await getAll(feature.path);
-      setItems(Array.isArray(data) ? data : data.data || []);
+      const rows = Array.isArray(data) ? data : data?.data;
+      if (!Array.isArray(rows)) throw new Error('The records endpoint returned an invalid list.');
+      setItems(rows);
     } catch (err) {
       toast.error(`Failed to load data: ${err.message}`);
       setItems([]);
@@ -358,14 +309,10 @@ export default function FeatureDetail() {
       return;
     }
     setAiLoading(true);
-    setAiResponse('');
+    setAiResponse(null);
     try {
       const result = await aiAction(feature.aiEndpoint, aiPrompt);
-      const content =
-        result?.data?.choices?.[0]?.message?.content ||
-        result?.choices?.[0]?.message?.content ||
-        (typeof result?.data === 'string' ? result.data : JSON.stringify(result?.data || result, null, 2));
-      setAiResponse(content);
+      setAiResponse(result?.data ?? result);
       toast.success('AI analysis complete');
     } catch (err) {
       toast.error(`AI action failed: ${err.message}`);
@@ -733,6 +680,13 @@ export default function FeatureDetail() {
 
           {aiPanelOpen && (
             <div style={{ padding: '0 20px 20px' }}>
+              <div aria-label="AI prompt examples" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {[
+                  ['Quick review', `Review ${feature.aiLabel} for a fictional team with rising costs this month. Identify the likely drivers, assumptions to verify, and three practical next steps.`],
+                  ['Planning scenario', `Prepare a ${feature.aiLabel} plan for a fictional team handling 12,000 monthly requests with a $2,400 budget. Compare options, note missing measurements, and prioritize actions.`],
+                  ['Detailed review', `Analyze ${feature.aiLabel} for a fictional organization with two providers, uneven demand, and a strict latency target. Separate supplied facts from assumptions, list risks, and recommend an evidence gathering plan.`],
+                ].map(([label, prompt]) => <button key={label} type="button" className="btn btn-ghost" disabled={aiLoading} onClick={() => setAiPrompt(prompt)}>Fill prompt · {label}</button>)}
+              </div>
               <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
                 <textarea
                   className="form-textarea"
@@ -770,7 +724,7 @@ export default function FeatureDetail() {
                 </button>
               </div>
 
-              {aiResponse && (
+              {aiResponse !== null && (
                 <div
                   className="ai-response"
                   style={{
@@ -787,7 +741,7 @@ export default function FeatureDetail() {
                       AI Analysis Result
                     </span>
                   </div>
-                  <div className="ai-content">{renderAIContent(aiResponse)}</div>
+                  <div className="ai-content"><GeneratedAiResponse response={aiResponse} /></div>
                 </div>
               )}
             </div>

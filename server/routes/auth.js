@@ -6,6 +6,27 @@ const pool = require('../db');
 const auth = require('../middleware/auth');
 const { jwtSecret } = require('../config/security');
 
+// This local development helper uses the configured demo account. It never
+// creates an account or authenticates the request; the user submits separately.
+router.get('/demo-credentials', (req, res) => {
+  const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+  const localAddress = value => {
+    try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(value).hostname); }
+    catch { return false; }
+  };
+  const origin = req.get('origin');
+  if (process.env.NODE_ENV === 'production' || !local || !localAddress(`http://${req.get('host')}`) || (origin && !localAddress(origin))) {
+    return res.status(404).json({ error: 'Demo autofill is unavailable here.' });
+  }
+  const pairs = ['DEMO', 'SEED_ADMIN', 'ADMIN', 'DEFAULT'];
+  const pair = pairs.map(prefix => ({
+    email: process.env[`${prefix}_EMAIL`], password: process.env[`${prefix}_PASSWORD`]
+  })).find(value => value.email && value.password);
+  if (!pair) return res.status(404).json({ error: 'Demo credentials are not configured for this local app.' });
+  res.set('Cache-Control', 'no-store');
+  return res.json(pair);
+});
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {

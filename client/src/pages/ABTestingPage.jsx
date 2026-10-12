@@ -28,7 +28,8 @@ export default function ABTestingPage() {
   async function fetchTests() {
     setLoading(true);
     const res = await authFetch(`/api/ab-testing?page=${page}&limit=${LIMIT}`);
-    if (res.success) { setTests(res.data); setTotal(res.total || res.data.length); }
+    if (res.success && Array.isArray(res.data)) { setTests(res.data); setTotal(res.total ?? res.data.length); }
+    else { setTests([]); setTotal(0); }
     setLoading(false);
   }
 

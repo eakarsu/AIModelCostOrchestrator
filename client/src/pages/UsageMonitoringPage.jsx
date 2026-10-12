@@ -26,7 +26,8 @@ export default function UsageMonitoringPage() {
   async function fetchData() {
     setLoading(true);
     const res = await authFetch(`/api/usage-monitoring?page=${page}&limit=${LIMIT}`);
-    if (res.success) { setRecords(res.data); setTotal(res.total || res.data.length); }
+    if (res.success && Array.isArray(res.data)) { setRecords(res.data); setTotal(res.total ?? res.data.length); }
+    else { setRecords([]); setTotal(0); }
     setLoading(false);
   }
 

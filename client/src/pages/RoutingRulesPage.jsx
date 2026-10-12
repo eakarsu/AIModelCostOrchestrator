@@ -25,7 +25,8 @@ export default function RoutingRulesPage() {
   async function fetch_rules() {
     setLoading(true);
     const res = await authFetch(`/api/routing-rules?page=${page}&limit=${LIMIT}`);
-    if (res.success) { setRules(res.data); setTotal(res.total || res.data.length); }
+    if (res.success && Array.isArray(res.data)) { setRules(res.data); setTotal(res.total ?? res.data.length); }
+    else { setRules([]); setTotal(0); }
     setLoading(false);
   }
 

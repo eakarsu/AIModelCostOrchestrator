@@ -1,3 +1,5 @@
+
+import FullAIExamples, { useFullAIExamples } from "../components/FullAIExamples.jsx";
 import GeneratedAiResponse from './GeneratedAiResponse';
 import React, { useState } from 'react';
 import AppLayout from '../components/AppLayout';
@@ -165,6 +167,8 @@ async function postJson(url, payload) {
 }
 
 export default function AIToolsPage() {
+  const fullAIExamples = useFullAIExamples();
+
   const [activeKey, setActiveKey] = useState(TOOLS[0].key);
   const [inputs, setInputs] = useState({});
   const [loading, setLoading] = useState(false);
@@ -238,7 +242,7 @@ export default function AIToolsPage() {
           <h2 style={{ marginBottom: 4 }}>{tool.label}</h2>
           <p style={{ color: '#94a3b8', marginBottom: 16 }}>{tool.description}</p>
 
-          <form onSubmit={submit}>
+          <form onSubmit={submit} data-full-ai-workspace="AIToolsPage"><FullAIExamples controller={fullAIExamples} disabled={Boolean(loading)} />
             {tool.fields.map(field => (
               <div key={field.key} style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
@@ -251,7 +255,7 @@ export default function AIToolsPage() {
                     value={inputs[field.key] || ''}
                     onChange={e => setField(field.key, e.target.value)}
                     placeholder={field.placeholder || ''}
-                    style={{ width: '100%', padding: 8, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6 }}
+                    style={{ width: '100%', padding: 8, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6 }} data-full-ai-field={fullAIExamples.bind({ current: inputs[field.key] || '', change: e => setField(field.key, e.target.value), label: "inputs[field.key]", manual: false, json: false }, "p1-9676", [(typeof field === 'object' ? field?.key ?? field?.name ?? field?.id ?? '' : field),field.key].join(":"))}
                   />
                 ) : (
                   <input
@@ -260,7 +264,7 @@ export default function AIToolsPage() {
                     value={inputs[field.key] || ''}
                     onChange={e => setField(field.key, e.target.value)}
                     placeholder={field.placeholder || ''}
-                    style={{ width: '100%', padding: 8, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6 }}
+                    style={{ width: '100%', padding: 8, background: '#0f172a', color: '#e2e8f0', border: '1px solid #334155', borderRadius: 6 }} data-full-ai-field={fullAIExamples.bind({ current: inputs[field.key] || '', change: e => setField(field.key, e.target.value), label: "inputs[field.key]", manual: false, json: false }, "p1-10149", [(typeof field === 'object' ? field?.key ?? field?.name ?? field?.id ?? '' : field),field.key].join(":"))}
                   />
                 )}
               </div>

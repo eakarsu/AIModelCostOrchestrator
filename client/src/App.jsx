@@ -1,3 +1,4 @@
+import AIReportLibrary from "./components/AIReportLibrary";
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -39,7 +40,7 @@ function LoadingFallback() {
 
 export default function App() {
   return (
-    <React.Suspense fallback={<LoadingFallback />}>
+    <><AIReportLibrary floating /><React.Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route path="/codex/custom-viz" element={<ProtectedRoute><CodexCustomVizFeature /></ProtectedRoute>} />
         <Route path="/codex/operations" element={<ProtectedRoute><CodexOperationsFeature /></ProtectedRoute>} />
@@ -59,6 +60,6 @@ export default function App() {
         <Route path="/dashboard/:feature" element={<ProtectedRoute><FeatureDetail /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </React.Suspense>
+    </React.Suspense></>
   );
 }
